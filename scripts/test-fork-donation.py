@@ -28,7 +28,7 @@ def check(binary: Path) -> None:
             )
             if not re.search(r"\bDONATE\s+" + str(expected) + r"%", result.stdout):
                 raise AssertionError(f"donation setting {value!r} did not resolve to {expected}%")
-            if "config OK" not in result.stdout:
+            if not re.search(r"\bconfig\s+OK\b", result.stdout):
                 raise AssertionError("dry-run did not accept the configuration")
             print(f"donate-level={value!r}: {expected}%, config OK")
 
