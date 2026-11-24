@@ -13,12 +13,12 @@ readonly JOBS="${JOBS:-2}"
 readonly BUILD_ROOT="${BUILD_ROOT:-${REPO_DIR}/build/static-linux-x86_64}"
 readonly RELEASE_ID="${RELEASE_ID:-dev-$(git -C "$REPO_DIR" rev-parse --short=12 HEAD)}"
 
-readonly UV_VERSION=1.51.0
-readonly UV_SHA256=5f0557b90b1106de71951a3c3931de5e0430d78da1d9a10287ebc7a3f78ef8eb
-readonly SSL_VERSION=3.0.22
-readonly SSL_SHA256=67ebca7e50d17383028045486653492195b83db95f8558709701bb47b5c1ef81
-readonly HWLOC_VERSION=2.12.1
-readonly HWLOC_SHA256=ffa02c3a308275a9339fbe92add054fac8e9a00cb8fe8c53340094012cb7c633
+readonly UV_VERSION=1.53.0
+readonly UV_SHA256=cb0d6dd2128d5a95bd242c6cc982a24fe608fa93da57b6b4ec763b0018c53e64
+readonly SSL_VERSION=3.5.9
+readonly SSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
+readonly HWLOC_VERSION=2.15.0
+readonly HWLOC_SHA256=f54bbdfc9f8015308c2e7bbab3e7789e47436a4a016689e5749a0c35d6877619
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 require() { command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"; }
@@ -28,12 +28,12 @@ require() { command -v "$1" >/dev/null 2>&1 || die "Required command not found: 
 [[ "$RELEASE_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'Invalid RELEASE_ID'
 for command_name in git wget tar sha256sum make perl file readelf install cc c++; do require "$command_name"; done
 require "$CMAKE_BIN"
-git -C "$REPO_DIR" merge-base --is-ancestor v6.26.0 HEAD || die 'Source must descend from v6.26.0'
+git -C "$REPO_DIR" merge-base --is-ancestor v6.27.0 HEAD || die 'Source must descend from v6.27.0'
 [[ -z "$(git -C "$REPO_DIR" status --porcelain)" ]] || die 'Refusing to build from a dirty source tree'
 
 mkdir -p -- "$BUILD_ROOT"/{downloads,sources,build,dist}
 readonly WORK_DIR="$(cd -- "$BUILD_ROOT" && pwd -P)"
-readonly DEPS_DIR="$WORK_DIR/deps/uv${UV_VERSION}-ssl${SSL_VERSION}-hwloc${HWLOC_VERSION}"
+readonly DEPS_DIR="$WORK_DIR/deps/uv${UV_VERSION}-ssl${SSL_VERSION}"
 readonly APP_BUILD="$WORK_DIR/build/app-uv${UV_VERSION}-ssl${SSL_VERSION}-hwloc${HWLOC_VERSION}"
 mkdir -p -- "$DEPS_DIR"
 
@@ -66,7 +66,7 @@ download_archive "libuv-v${UV_VERSION}.tar.gz" \
 download_archive "openssl-${SSL_VERSION}.tar.gz" \
     "https://github.com/openssl/openssl/releases/download/openssl-${SSL_VERSION}/openssl-${SSL_VERSION}.tar.gz" "$SSL_SHA256"
 download_archive "hwloc-${HWLOC_VERSION}.tar.gz" \
-    "https://download.open-mpi.org/release/hwloc/v2.12/hwloc-${HWLOC_VERSION}.tar.gz" "$HWLOC_SHA256"
+    "https://download.open-mpi.org/release/hwloc/v2.15/hwloc-${HWLOC_VERSION}.tar.gz" "$HWLOC_SHA256"
 extract_archive "libuv-v${UV_VERSION}"
 extract_archive "openssl-${SSL_VERSION}"
 extract_archive "hwloc-${HWLOC_VERSION}"
@@ -84,7 +84,7 @@ fi
 if [[ ! -f "$DEPS_DIR/.openssl-ready" ]]; then
     (
         cd -- "$WORK_DIR/sources/openssl-${SSL_VERSION}"
-        ./config no-shared no-asm no-zlib no-comp no-dgram no-filenames no-cms \
+        ./config no-shared no-asm no-tests no-docs no-apps no-zlib no-comp no-dgram no-filenames no-cms \
             --prefix="$DEPS_DIR" --openssldir="$DEPS_DIR/ssl" --libdir=lib
         make -j "$JOBS"
         make install_sw
@@ -93,7 +93,7 @@ if [[ ! -f "$DEPS_DIR/.openssl-ready" ]]; then
     touch "$DEPS_DIR/.openssl-ready"
 fi
 
-if [[ ! -f "$DEPS_DIR/.hwloc-ready" ]]; then
+if [[ ! -f "$DEPS_DIR/.hwloc-${HWLOC_VERSION}-ready" ]]; then
     (
         cd -- "$WORK_DIR/sources/hwloc-${HWLOC_VERSION}"
         ./configure --prefix="$DEPS_DIR" --libdir="$DEPS_DIR/lib" \
@@ -102,7 +102,7 @@ if [[ ! -f "$DEPS_DIR/.hwloc-ready" ]]; then
         make install
     )
     [[ -f "$DEPS_DIR/lib/libhwloc.a" ]] || die 'hwloc.a was not installed'
-    touch "$DEPS_DIR/.hwloc-ready"
+    touch "$DEPS_DIR/.hwloc-${HWLOC_VERSION}-ready"
 fi
 
 "$CMAKE_BIN" -S "$REPO_DIR" -B "$APP_BUILD" \
@@ -120,7 +120,7 @@ readonly BIN="$APP_BUILD/xmrig"
 [[ -x "$BIN" ]] || die 'XMRig binary was not built'
 file "$BIN" | grep -q 'statically linked' || die 'XMRig binary is not static'
 if readelf -l "$BIN" | grep -q INTERP; then die 'XMRig binary has a dynamic interpreter'; fi
-"$BIN" --version | grep -q 'XMRig 6.26.0' || die 'Unexpected XMRig version'
+"$BIN" --version | grep -q 'XMRig 6.27.0' || die 'Unexpected XMRig version'
 
 readonly PACKAGE="xmrig-${RELEASE_ID}-linux-x86_64-static-cpu"
 readonly ARCHIVE="$WORK_DIR/dist/$PACKAGE.tar.gz"
@@ -129,7 +129,7 @@ readonly STAGE="$(mktemp -d "$WORK_DIR/stage.XXXXXX")"
 install -d -- "$STAGE/$PACKAGE"
 install -m 755 -- "$BIN" "$STAGE/$PACKAGE/xmrig"
 install -m 644 -- "$REPO_DIR/LICENSE" "$STAGE/$PACKAGE/LICENSE"
-printf 'Source: https://github.com/fisherzhu/xmrig\nCommit: %s\nBase: v6.26.0\nBuild: Linux x86_64 static CPU-only\nDependencies: libuv %s, OpenSSL %s, hwloc %s\nBinary SHA-256: %s\nNote: static glibc may still require matching runtime NSS/DNS components.\n' \
+printf 'Source: https://github.com/fisherzhu/xmrig\nCommit: %s\nBase: v6.27.0\nBuild: Linux x86_64 static CPU-only\nDependencies: libuv %s, OpenSSL %s, hwloc %s\nBinary SHA-256: %s\nNote: static glibc may still require matching runtime NSS/DNS components.\n' \
     "$(git -C "$REPO_DIR" rev-parse HEAD)" "$UV_VERSION" "$SSL_VERSION" "$HWLOC_VERSION" \
     "$(sha256sum "$BIN" | cut -d ' ' -f 1)" > "$STAGE/$PACKAGE/BUILDINFO.txt"
 tar -C "$STAGE" -czf "$ARCHIVE" "$PACKAGE"

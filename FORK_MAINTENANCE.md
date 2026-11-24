@@ -38,9 +38,10 @@ SHA-256 and tested platforms in the Release notes. Do not auto-merge an
 upstream release or rely on a patch applying cleanly as evidence of
 correctness.
 
-Dedicated automated contract tests and a required CI gate are **pending**.
-Before adopting the next upstream XMRig version, add tests that fail on an
-upstream default of 1% and pass for omitted, explicit 0% and explicit
-positive values. Until then, the v6.26.0-static.1 manual dry-run evidence
-is recorded in the pool's local architecture-review archive and is not
-equivalent to an automated upgrade gate.
+Run the binary contract before releasing:
+```sh
+python3 scripts/test-fork-donation.py /path/to/xmrig
+```
+
+The check covers omitted, explicit 0%, 1% and 99% without connecting to
+a pool. A required CI gate is still pending.
